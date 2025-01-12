@@ -216,5 +216,12 @@ class Pitchtalk {
             }
         }
         await this.countdown(21600); // Wait before repeating the loop
+        }
     }
 }
+
+const client = new Pitchtalk();
+client.main().catch(err => {
+    client.log(err.message, 'error');
+    process.exit(1);
+});

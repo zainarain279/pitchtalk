@@ -148,7 +148,7 @@ class Pitchtalk {
         const url = "https://api.pitchtalk.app/v1/api/users/claim-farming";
         
         try {
-            const response = await axios.get(url, null, { headers: this.getHeaders(hash, token) });
+            const response = await axios.get(url, { headers: this.getHeaders(hash, token) });
             if (response) {
                 this.log('Claim farming success!', 'success');
                 return response.data;
@@ -160,79 +160,77 @@ class Pitchtalk {
             return null;
         }
     }
+async getTasks(token, hash) {
+    try {
+        const url = "https://api.pitchtalk.app/v1/api/tasks"; // Replace with the correct endpoint
+        const response = await axios.get(url, { headers: this.getHeaders(hash, token) });
 
-    async getTasks(token, hash) {
-        const url = "https://api.pitchtalk.app/v1/api/tasks";
-        
-        try {
-            const response = await axios.get(url, { headers: this.getHeaders(hash, token) });
-            if (response.status === 200) {
-                return response.data;
-            } else {
-                throw new Error(`Failed to get tasks with status ${response.status}`);
-            }
-        } catch (error) {
-            this.log(`Error getting tasks: ${error.message}`, 'error');
-            return null;
+        if (response && response.data) {
+            return response.data.tasks; // Assuming response structure has a "tasks" array
+        } else {
+            this.log(`No tasks found for hash ${hash}`, 'warning');
+            return [];
         }
+    } catch (error) {
+        this.log(`Error fetching tasks: ${error.message}`, 'error');
+        return [];
     }
-
-    async startTask(token, hash, taskId) {
-        const url = `https://api.pitchtalk.app/v1/api/tasks/${taskId}/start`;
-        
-        try {
-            const response = await axios.post(url, {}, { headers: this.getHeaders(hash, token) });
-            if (response) {
-                return response.data;
-            } else {
-                throw new Error(`Failed to start task with status ${response.status}`);
-            }
-        } catch (error) {
-            this.log(`Error starting task: ${error.message}`, 'error');
-            return null;
-        }
-    }
-
-    async verifyTasks(token, hash) {
-        const url = "https://api.pitchtalk.app/v1/api/tasks/verify";
-        
-        try {
-            const response = await axios.get(url, { headers: this.getHeaders(hash, token) });
-            if (response.status === 200) {
-                return response.data;
-            } else {
-                throw new Error(`Failed to verify tasks with status ${response.status}`);
-            }
-        } catch (error) {
-            this.log(`Error verifying tasks: ${error.message}`, 'error');
-            return null;
-        }
-    }
-
+}
     async main() {
-        const dataFile = path.join(__dirname, 'data.txt');
-        const data = fs.readFileSync(dataFile, 'utf8')
-            .replace(/\r/g, '')
-            .split('\n')
-            .filter(Boolean);
-        while (true) {
-            for (let i = 0; i < data.length; i++) {
-                const hash = data[i];
-                const authResult = await this.auth(hash);
-                
-                if (authResult) {
-                    const { accessToken, username, coins, tickets, loginStreak, farmingId } = authResult;
-                    this.log(`=https://t.me/AirdropScript6========= Account ${i + 1} | ${username} =https://t.me/AirdropScript6=========`, 'custom');
-                    this.log(`Coins: ${coins}, Tickets: ${tickets}, Login Streak: ${loginStreak}`, 'info');
-                    
-                    if (farmingId === null) {
-                        await this.createFarming(accessToken, hash);
-                    } else {
-                        await this.getFarming(accessToken, hash);
+    const dataFile = path.join(__dirname, 'data.txt');
+    const data = fs.readFileSync(dataFile, 'utf8')
+        .replace(/\r/g, '')
+        .split('\n')
+        .filter(Boolean);
+
+    while (true) {
+        for (let i = 0; i < data.length; i++) {
+            const hash = data[i];
+            const authResult = await this.auth(hash);
+
+            if (authResult) {
+                const { accessToken, username, coins, tickets, loginStreak, farmingId } = authResult;
+                this.log(`=https://t.me/AirdropScript6========= Account ${i + 1} | ${username} =https://t.me/AirdropScript6=========`, 'custom');
+                this.log(`Coins: ${coins}, Tickets: ${tickets}, Login Streak: ${loginStreak}`, 'info');
+
+                // Handle farming
+                if (farmingId === null) {
+                    await this.createFarming(accessToken, hash);
+                } else {
+                    await this.getFarming(accessToken, hash);
+                }
+
+                // Fetch tasks
+                const tasks = await this.getTasks(accessToken, hash);
+                if (tasks && tasks.length > 0) {
+                    for (const task of tasks) {
+                        if (this.skippedTaskIds.includes(task.id)) {
+                            this.log(`Task ${task.id} is skipped`, 'warning');
+                            continue;
+                        }
+
+                        this.log(`Starting task ${task.id}`, 'info');
+                        const startResult = await this.startTask(accessToken, hash, task.id);
+
+                        if (startResult) {
+                            this.log(`Task ${task.id} started`, 'success');
+                            const verifyResult = await this.verifyTasks(accessToken, hash);
+
+                            if (verifyResult) {
+                                this.log(`Task ${task.id} verified and completed`, 'success');
+                            } else {
+                                this.log(`Failed to verify task ${task.id}`, 'error');
+                            }
+                        } else {
+                            this.log(`Failed to start task ${task.id}`, 'error');
+                        }
                     }
+                } else {
+                    this.log('No tasks available', 'warning');
                 }
             }
-            await this.countdown(21600);
+        }
+        await this.countdown(21600); // Wait before repeating the loop
         }
     }
 }

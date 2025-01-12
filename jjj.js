@@ -162,35 +162,59 @@ class Pitchtalk {
     }
 
     async main() {
-        const dataFile = path.join(__dirname, 'data.txt');
-        const data = fs.readFileSync(dataFile, 'utf8')
-            .replace(/\r/g, '')
-            .split('\n')
-            .filter(Boolean);
-        while (true) {
-            for (let i = 0; i < data.length; i++) {
-                const hash = data[i];
-                const authResult = await this.auth(hash);
-                
-                if (authResult) {
-                    const { accessToken, username, coins, tickets, loginStreak, farmingId } = authResult;
-                    this.log(`=https://t.me/AirdropScript6========= Account ${i + 1} | ${username} =https://t.me/AirdropScript6=========`, 'custom');
-                    this.log(`Coins: ${coins}, Tickets: ${tickets}, Login Streak: ${loginStreak}`, 'info');
-                    
-                    if (farmingId === null) {
-                        await this.createFarming(accessToken, hash);
-                    } else {
-                        await this.getFarming(accessToken, hash);
+    const dataFile = path.join(__dirname, 'data.txt');
+    const data = fs.readFileSync(dataFile, 'utf8')
+        .replace(/\r/g, '')
+        .split('\n')
+        .filter(Boolean);
+
+    while (true) {
+        for (let i = 0; i < data.length; i++) {
+            const hash = data[i];
+            const authResult = await this.auth(hash);
+
+            if (authResult) {
+                const { accessToken, username, coins, tickets, loginStreak, farmingId } = authResult;
+                this.log(`=https://t.me/AirdropScript6========= Account ${i + 1} | ${username} =https://t.me/AirdropScript6=========`, 'custom');
+                this.log(`Coins: ${coins}, Tickets: ${tickets}, Login Streak: ${loginStreak}`, 'info');
+
+                // Handle farming
+                if (farmingId === null) {
+                    await this.createFarming(accessToken, hash);
+                } else {
+                    await this.getFarming(accessToken, hash);
+                }
+
+                // Fetch tasks
+                const tasks = await this.getTasks(accessToken, hash);
+                if (tasks && tasks.length > 0) {
+                    for (const task of tasks) {
+                        if (this.skippedTaskIds.includes(task.id)) {
+                            this.log(`Task ${task.id} is skipped`, 'warning');
+                            continue;
+                        }
+
+                        this.log(`Starting task ${task.id}`, 'info');
+                        const startResult = await this.startTask(accessToken, hash, task.id);
+
+                        if (startResult) {
+                            this.log(`Task ${task.id} started`, 'success');
+                            const verifyResult = await this.verifyTasks(accessToken, hash);
+
+                            if (verifyResult) {
+                                this.log(`Task ${task.id} verified and completed`, 'success');
+                            } else {
+                                this.log(`Failed to verify task ${task.id}`, 'error');
+                            }
+                        } else {
+                            this.log(`Failed to start task ${task.id}`, 'error');
+                        }
                     }
+                } else {
+                    this.log('No tasks available', 'warning');
                 }
             }
-            await this.countdown(21600);
         }
+        await this.countdown(21600); // Wait before repeating the loop
     }
 }
-
-const client = new Pitchtalk();
-client.main().catch(err => {
-    client.log(err.message, 'error');
-    process.exit(1);
-});
